@@ -1,4 +1,5 @@
 const IGNORED_DIRECTORIES = new Set([
+  // Web & Node / Package Managers
   "node_modules",
   ".git",
   ".svn",
@@ -13,7 +14,25 @@ const IGNORED_DIRECTORIES = new Set([
   ".next",
   ".nuxt",
   "coverage",
-  "vendor"
+  "vendor",
+
+  // Flutter & Dart Build Output / Cache
+  ".dart_tool",
+  "ephemeral",
+
+  // Native Mobile & Desktop App Boilerplate
+  "android",
+  "ios",
+  "linux",
+  "macos",
+  "windows",
+  "web", // Remove "web" from here if you specifically build Flutter Web apps
+
+  // Native Build Caches & Derived Data
+  ".gradle",
+  "buildOutputCleanup",
+  "Pods",
+  "DerivedData"
 ]);
 
 // Exact filenames to ignore
@@ -26,16 +45,33 @@ const IGNORED_FILES = new Set([
   "Thumbs.db",
   ".gitignore",
   ".gitattributes",
-  ".dockerignore"
+  ".dockerignore",
+  "local.properties"
 ]);
 
 // Binary / Non-text file extensions to skip
 const IGNORED_EXTENSIONS = new Set([
+  // Media
   "png", "jpg", "jpeg", "gif", "webp", "ico", "svg", "bmp", "tiff",
   "mp3", "mp4", "wav", "avi", "mov", "webm",
+  
+  // Archives
   "zip", "tar", "gz", "7z", "rar",
+  
+  // Binaries & Documents
   "pdf", "exe", "dll", "so", "dylib", "dmg",
-  "woff", "woff2", "ttf", "eot"
+  
+  // Fonts
+  "woff", "woff2", "ttf", "eot",
+
+  // Mobile / Xcode / Android Native Project Binaries & Configs
+  "iml",
+  "xcodeproj",
+  "xcworkspace",
+  "pbxproj",
+  "plist",
+  "jar",
+  "aar"
 ]);
 
 //Check if a file path matches any smart filter criteria
