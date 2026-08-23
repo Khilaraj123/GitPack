@@ -1,46 +1,51 @@
 const IGNORED_DIRECTORIES = new Set([
-  // Web & Node / Package Managers
-  "node_modules",
-  ".git",
-  ".svn",
-  ".hg",
-  ".idea",
-  ".vscode",
-  ".vs",
-  "packages",
-  "dist",
-  "build",
-  "out",
-  ".next",
-  ".nuxt",
-  "coverage",
-  "vendor",
+  // Version Control & IDEs
+  ".git", ".svn", ".hg", ".idea", ".vscode", ".vs",
 
-  // Flutter & Dart Build Output / Cache
-  ".dart_tool",
-  "ephemeral",
+  // Node, JavaScript & Web
+  "node_modules", "dist", "build", "out", ".next", ".nuxt", ".svelte-kit", ".astro", "coverage",
 
-  // Native Mobile & Desktop App Boilerplate
-  "android",
-  "ios",
-  "linux",
-  "macos",
-  "windows",
-  "web", // Remove "web" from here if you specifically build Flutter Web apps
+  // Flutter / Dart
+  ".dart_tool", "ephemeral",
 
-  // Native Build Caches & Derived Data
-  ".gradle",
-  "buildOutputCleanup",
-  "Pods",
-  "DerivedData"
+  // Native Mobile Shells (Flutter/React Native)
+  "android", "ios", "linux", "macos", "windows", "web", "Pods", "Carthage", "DerivedData",
+
+  // Python
+  "__pycache__", ".pytest_cache", ".venv", "venv", "env", ".mypy_cache", ".ruff_cache", ".tox",
+
+  // Java / Kotlin / Scala
+  ".gradle", "target", ".m2", "buildOutputCleanup",
+
+  // C# / .NET
+  "bin", "obj",
+
+  // Rust / Go / C++
+  "cmake-build-debug", "cmake-build-release",
+
+  // PHP / Ruby
+  "vendor", ".bundle", "tmp",
+
+  // Serverless / Cloud
+  ".terraform", ".aws-sam", ".serverless"
 ]);
 
-// Exact filenames to ignore
 const IGNORED_FILES = new Set([
+  // Package Lock Files (Token Wasters)
   "package-lock.json",
   "yarn.lock",
   "pnpm-lock.yaml",
   "bun.lockb",
+  "pubspec.lock",
+  "Cargo.lock",
+  "composer.lock",
+  "Gemfile.lock",
+  "poetry.lock",
+  "Pipfile.lock",
+  "Podfile.lock",
+  "Package.resolved",
+
+  // System & Environment Configuration
   ".DS_Store",
   "Thumbs.db",
   ".gitignore",
@@ -49,67 +54,60 @@ const IGNORED_FILES = new Set([
   "local.properties"
 ]);
 
-// Binary / Non-text file extensions to skip
 const IGNORED_EXTENSIONS = new Set([
-  // Media
+  // Images & Media
   "png", "jpg", "jpeg", "gif", "webp", "ico", "svg", "bmp", "tiff",
   "mp3", "mp4", "wav", "avi", "mov", "webm",
   
-  // Archives
+  // Compressed Archives
   "zip", "tar", "gz", "7z", "rar",
   
-  // Binaries & Documents
-  "pdf", "exe", "dll", "so", "dylib", "dmg",
-  
+  // Compiled Binaries & Documents
+  "pdf", "exe", "dll", "so", "dylib", "dmg", "apk", "aab", "ipa",
+  "o", "obj", "a", "lib", "pdb", "rlib", "class", "jar", "war", "ear",
+  "pyc", "pyo", "pyd",
+
   // Fonts
   "woff", "woff2", "ttf", "eot",
 
-  // Mobile / Xcode / Android Native Project Binaries & Configs
-  "iml",
-  "xcodeproj",
-  "xcworkspace",
-  "pbxproj",
-  "plist",
-  "jar",
-  "aar"
+  // IDE / Native Build Metadata
+  "iml", "xcodeproj", "xcworkspace", "pbxproj", "plist", "tfstate"
 ]);
 
-//Check if a file path matches any smart filter criteria
-export function isIgnoredPath(filePath, customExcludes = []){
-    const parts = filePath.split("/");
-    const fileName = parts[parts.length - 1];
+export function isIgnoredPath(filePath, customExcludes = []) {
+  const parts = filePath.split("/");
+  const fileName = parts[parts.length - 1];
 
-    //check file extension for known binary formats
-    const extension = fileName.includes(".") ? fileName.split(".").pop().toLowerCase() : "";
-    if(IGNORED_EXTENSIONS.has(extension)){
-        return true;
+  // Extension check
+  const extension = fileName.includes(".") ? fileName.split(".").pop().toLowerCase() : "";
+  if (extension && IGNORED_EXTENSIONS.has(extension)) {
+    return true;
+  }
+
+  // Exact filename check
+  if (IGNORED_FILES.has(fileName)) {
+    return true;
+  }
+
+  // Directory check
+  if (parts.some(p => IGNORED_DIRECTORIES.has(p))) {
+    return true;
+  }
+
+  // Custom user excludes check
+  for (const exclude of customExcludes) {
+    if (parts.includes(exclude)) {
+      return true;
     }
+  }
 
-    //check against known ignored filenames
-    if(IGNORED_FILES.has(fileName)){
-        return true;
-    }
-
-    //check against known ignored directories
-    if(parts.some(p => IGNORED_DIRECTORIES.has(p))){
-        return true;
-    }
-
-    //check custom excludes against exact path segments
-    for (const exclude of customExcludes) {
-        if (parts.includes(exclude)) {
-            return true;
-        }
-    }
-
-    return false;
+  return false;
 }
 
-//Filters array of files based on smart filter configuration
-export function applySmartFilter(files, excludeString = ""){
-    const customExcludes = excludeString.split(",").map(s => s.trim()).filter(Boolean);
-    return files.map(file => ({
-        ...file,
-        included: !file.isBinary && !isIgnoredPath(file.path, customExcludes)
-    }));
+export function applySmartFilter(files, excludeString = "") {
+  const customExcludes = excludeString.split(",").map(s => s.trim()).filter(Boolean);
+  return files.map(file => ({
+    ...file,
+    included: !file.isBinary && !isIgnoredPath(file.path, customExcludes)
+  }));
 }
