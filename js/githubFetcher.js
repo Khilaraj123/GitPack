@@ -78,7 +78,8 @@ export function fetchGithubRepo(owner, repo, branch = "", subpath = "", token = 
                     owner,
                     repo,
                     branch: resolvedBranch,
-                    files
+                    files,
+                    token
                 };
             });
     });

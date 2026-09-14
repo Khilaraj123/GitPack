@@ -8,31 +8,32 @@ export function formatTree(files) {
 }
 
 
-//Generates only the concatenated File Contents output
+// Generates only the concatenated File Contents output
 export function formatContent(files) {
     const activeFiles = files.filter(f => f.included && !f.isBinary);
-    let output = "";
+    const parts = [];
 
     for (const file of activeFiles) {
-        output += `================================================\n`;
-        output += `File: ${file.path}\n`;
-        output += `================================================\n`;
+        parts.push("================================================\n");
+        parts.push(`File: ${file.path}\n`);
+        parts.push("================================================\n");
         const contentMessage = file.content === "" ? "(empty file)" : (file.content || "(binary/failed to read)");
-        output += `${contentMessage}\n\n`;
+        parts.push(contentMessage);
+        parts.push("\n\n");
     }
 
-    return output;
+    return parts.join("");
 }
 
 export function formatPackage(files, includeTree = true) {
-    let output = "";
+    const parts = [];
 
     if (includeTree) {
-        output += "Directory structure:\n";
-        output += formatTree(files);
-        output += "\n\n" + "=".repeat(48) + "\n\n";
+        parts.push("Directory structure:\n");
+        parts.push(formatTree(files));
+        parts.push("\n\n" + "=".repeat(48) + "\n\n");
     }
 
-    output += formatContent(files);
-    return output;
-}
+    parts.push(formatContent(files));
+    return parts.join("");
+}

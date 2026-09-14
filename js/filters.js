@@ -111,3 +111,5 @@ export function applySmartFilter(files, excludeString = "") {
     included: !file.isBinary && !isIgnoredPath(file.path, customExcludes)
   }));
 }
+
+export const IGNORED_DIRECTORY_NAMES = IGNORED_DIRECTORIES;

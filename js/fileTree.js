@@ -18,9 +18,8 @@ export function buildAsciiTree(filePaths){
         }
     }
 
-    //Render tree recursively
-    function render(node, prefix = ""){
-        let output = "";
+    // Render tree recursively using array push to avoid O(n^2) string copying
+    function render(node, prefix = "", parts = []) {
         const keys = Object.keys(node).sort((a, b) => {
             const aIsDir = node[a] !== null;
             const bIsDir = node[b] !== null;
@@ -34,13 +33,13 @@ export function buildAsciiTree(filePaths){
             const connector = isLast ? "└──" : "├──";
             const childPrefix = isLast ? "    " : "│   ";
 
-            output += `${prefix}${connector} ${key}\n`;
+            parts.push(`${prefix}${connector} ${key}\n`);
 
             if(node[key] && typeof node[key] === "object"){
-                output += render(node[key], prefix + childPrefix);
+                render(node[key], prefix + childPrefix, parts);
             }
         });
-        return output;
+        return parts;
     }
-    return render(root).trim();
+    return render(root).join("").trim();
 }

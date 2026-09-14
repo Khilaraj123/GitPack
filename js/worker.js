@@ -1,4 +1,5 @@
 import * as fflate from 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js';
+import { IGNORED_DIRECTORY_NAMES } from './filters.js';
 
 async function readFileContent(file) {
     try {
@@ -28,36 +29,37 @@ self.addEventListener('message', async (e) => {
     if (type === 'local') {
         const { files } = e.data;
         const results = [];
+        const CONCURRENCY = 25;
+        const MAX_SIZE = 1000000; // 1MB size guard
 
-        for (let i = 0; i < files.length; i++) {
-            const { file, path } = files[i];
-            
-            const MAX_SIZE = 1000000; // 1MB size guard to prevent worker from crashing on huge files
-            if (file.size > MAX_SIZE) {
-                results.push({
-                    path: path,
-                    name: file.name,
-                    size: file.size,
-                    content: null,
-                    isBinary: true
-                });
-            } else {
+        for (let i = 0; i < files.length; i += CONCURRENCY) {
+            const chunk = files.slice(i, i + CONCURRENCY);
+            const chunkResults = await Promise.all(chunk.map(async ({ file, path }) => {
+                if (file.size > MAX_SIZE) {
+                    return {
+                        path,
+                        name: file.name,
+                        size: file.size,
+                        content: null,
+                        isBinary: true
+                    };
+                }
+
                 const content = await readFileContent(file);
                 const isBinary = content === null;
-                results.push({
-                    path: path,
+                return {
+                    path,
                     name: file.name,
                     size: file.size,
                     content: isBinary ? null : content,
                     isBinary
-                });
-            }
+                };
+            }));
 
-            // Send progress updates frequently to keep UI responsive
-            if (i % 10 === 0) {
-                self.postMessage({ type: 'progress', done: i + 1, total: files.length });
-            }
+            results.push(...chunkResults);
+            self.postMessage({ type: 'progress', done: Math.min(i + CONCURRENCY, files.length), total: files.length });
         }
+
         self.postMessage({ type: 'progress', done: files.length, total: files.length });
         self.postMessage({ type: 'done', files: results });
     
@@ -102,6 +104,12 @@ self.addEventListener('message', async (e) => {
                          if (done % 100 === 0) self.postMessage({ type: 'progress', done, total });
                          continue;
                     }
+                }
+
+                // Skip ignored directories early before binary checking or decoding
+                if (parts.some(p => IGNORED_DIRECTORY_NAMES.has(p))) {
+                    if (done % 100 === 0) self.postMessage({ type: 'progress', done, total });
+                    continue;
                 }
 
                 const size = fileData.length;
@@ -156,62 +164,181 @@ self.addEventListener('message', async (e) => {
             self.postMessage({ type: 'done', files: results });
         });
     } else if (type === 'github-fetch') {
-        const { owner, repo, branch, files } = e.data;
-        const results = [];
-        let index = 0;
-        const batchSize = 10;
-        let loadedCount = 0;
+        const { owner, repo, branch, files, token } = e.data;
 
-        async function next() {
-            if (index >= files.length) return;
-            const item = files[index++];
-            
-            const MAX_SIZE = 1000000;
+        let results;
+        if (token) {
+            try {
+                results = await fetchWithGraphQL(owner, repo, branch, files, token);
+            } catch (err) {
+                console.warn('GraphQL batching failed, falling back to raw CDN:', err);
+                results = await fetchWithRawCDN(owner, repo, branch, files, token);
+            }
+        } else {
+            results = await fetchWithRawCDN(owner, repo, branch, files, token);
+        }
+
+        self.postMessage({ type: 'progress', done: files.length, total: files.length });
+        self.postMessage({ type: 'done', files: results });
+    }
+});
+
+// Helper for raw CDN fetching with concurrency = 40
+async function fetchWithRawCDN(owner, repo, branch, files, token, onProgressIncrement) {
+    const results = new Array(files.length);
+    let index = 0;
+    let completed = 0;
+    const batchSize = 40; // Quick win: bumped from 10 to 40 concurrency
+    const MAX_SIZE = 1000000;
+    const headers = token ? { 'Authorization': `token ${token}` } : {};
+
+    async function worker() {
+        while (index < files.length) {
+            const currentIndex = index++;
+            const item = files[currentIndex];
+
             if (item.size > MAX_SIZE) {
-                loadedCount++;
-                results.push({
+                results[currentIndex] = {
                     path: item.path,
                     name: item.path.split("/").pop(),
                     content: null,
                     isBinary: true,
                     size: item.size || 0
-                });
-                return next();
+                };
+                completed++;
+                if (onProgressIncrement) {
+                    onProgressIncrement(1);
+                } else if (completed % 10 === 0 || completed === files.length) {
+                    self.postMessage({ type: 'progress', done: completed, total: files.length });
+                }
+                continue;
             }
 
             const fileUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${item.path}`;
 
             try {
-                const res = await fetch(fileUrl);
+                const res = await fetch(fileUrl, { headers });
                 const content = res.ok ? await res.text() : null;
                 const isBinary = content === null;
-                results.push({
+                results[currentIndex] = {
                     path: item.path,
                     name: item.path.split("/").pop(),
                     content: isBinary ? null : content,
                     isBinary,
                     size: item.size || 0
-                });
+                };
             } catch (err) {
-                results.push({
+                results[currentIndex] = {
                     path: item.path,
                     name: item.path.split("/").pop(),
                     content: null,
                     isBinary: true,
                     size: item.size || 0
-                });
+                };
             }
-            
-            loadedCount++;
-            if (loadedCount % 10 === 0) {
-                self.postMessage({ type: 'progress', done: loadedCount, total: files.length });
+
+            completed++;
+            if (onProgressIncrement) {
+                onProgressIncrement(1);
+            } else if (completed % 10 === 0 || completed === files.length) {
+                self.postMessage({ type: 'progress', done: completed, total: files.length });
             }
-            return next();
+        }
+    }
+
+    const workers = Array.from({ length: Math.min(batchSize, files.length) }, () => worker());
+    await Promise.all(workers);
+    return results;
+}
+
+// Helper for batched GraphQL fetching (up to 50 files per single HTTP request)
+async function fetchWithGraphQL(owner, repo, branch, files, token) {
+    const GQL_BATCH_SIZE = 50;
+    const results = new Array(files.length);
+    let loadedCount = 0;
+    const fallbackList = []; // Array of { file, originalIndex }
+
+    for (let i = 0; i < files.length; i += GQL_BATCH_SIZE) {
+        const chunk = files.slice(i, i + GQL_BATCH_SIZE);
+
+        const queryFields = chunk.map((item, idx) => {
+            const expression = `${branch}:${item.path}`;
+            return `f${idx}: object(expression: ${JSON.stringify(expression)}) { ... on Blob { text isBinary byteSize } }`;
+        }).join('\n');
+
+        const query = `query { repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(repo)}) { ${queryFields} } }`;
+
+        let success = false;
+        try {
+            const res = await fetch('https://api.github.com/graphql', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `bearer ${token}`
+                },
+                body: JSON.stringify({ query })
+            });
+
+            if (res.ok) {
+                const json = await res.json();
+                const repoData = json.data?.repository;
+                if (repoData) {
+                    success = true;
+                    for (let idx = 0; idx < chunk.length; idx++) {
+                        const item = chunk[idx];
+                        const globalIdx = i + idx;
+                        const blob = repoData[`f${idx}`];
+
+                        if (!blob) {
+                            fallbackList.push({ file: item, originalIndex: globalIdx });
+                        } else if (blob.isBinary) {
+                            results[globalIdx] = {
+                                path: item.path,
+                                name: item.path.split("/").pop(),
+                                content: null,
+                                isBinary: true,
+                                size: blob.byteSize || item.size || 0
+                            };
+                            loadedCount++;
+                        } else if (blob.text !== null && blob.text !== undefined) {
+                            results[globalIdx] = {
+                                path: item.path,
+                                name: item.path.split("/").pop(),
+                                content: blob.text,
+                                isBinary: false,
+                                size: blob.byteSize || item.size || 0
+                            };
+                            loadedCount++;
+                        } else {
+                            fallbackList.push({ file: item, originalIndex: globalIdx });
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn(`GraphQL chunk ${i} failed`, err);
         }
 
-        const workers = Array.from({ length: Math.min(batchSize, files.length) }, () => next());
-        await Promise.all(workers);
-        self.postMessage({ type: 'progress', done: files.length, total: files.length });
-        self.postMessage({ type: 'done', files: results });
+        if (!success) {
+            for (let idx = 0; idx < chunk.length; idx++) {
+                fallbackList.push({ file: chunk[idx], originalIndex: i + idx });
+            }
+        }
+
+        self.postMessage({ type: 'progress', done: loadedCount, total: files.length });
     }
-});
+
+    if (fallbackList.length > 0) {
+        const rawFiles = fallbackList.map(entry => entry.file);
+        const rawResults = await fetchWithRawCDN(owner, repo, branch, rawFiles, token, () => {
+            loadedCount++;
+            self.postMessage({ type: 'progress', done: loadedCount, total: files.length });
+        });
+
+        for (let j = 0; j < fallbackList.length; j++) {
+            results[fallbackList[j].originalIndex] = rawResults[j];
+        }
+    }
+
+    return results;
+}

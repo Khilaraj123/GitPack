@@ -138,7 +138,8 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
         document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
 
         btn.classList.add("active");
-        document.getElementById(btn.dataset.view).classList.add("active");
+        const targetView = document.getElementById(btn.dataset.view) || document.getElementById(`${btn.dataset.view}-view`);
+        if (targetView) targetView.classList.add("active");
     });
 });
 
