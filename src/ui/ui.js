@@ -1,5 +1,4 @@
-const ROW_HEIGHT = 36;
-const OVERSCAN = 10;
+import { ROW_HEIGHT, OVERSCAN } from "../app/constants.js";
 
 // Virtualized renderer for file list to maintain 60fps even with thousands of files
 export function renderFileList(loadedFiles, fileListContainer, updateOutput) {
@@ -73,10 +72,12 @@ export function renderFileList(loadedFiles, fileListContainer, updateOutput) {
             const checkbox = document.createElement("input");
             checkbox.type = "checkbox";
             checkbox.checked = file.included;
-            checkbox.disabled = file.isBinary;
+            const isNonCode = file.isBinary || file.isTooLarge;
+            checkbox.disabled = isNonCode;
 
             checkbox.addEventListener("change", () => {
                 files[index].included = checkbox.checked;
+                files[index].userOverride = true;
                 item.classList.toggle("excluded", !checkbox.checked);
                 if (typeof fileListContainer._updateOutput === 'function') {
                     fileListContainer._updateOutput();
@@ -91,6 +92,9 @@ export function renderFileList(loadedFiles, fileListContainer, updateOutput) {
 
             if (file.isBinary) {
                 pathSpan.textContent += " (binary - skipped)";
+                pathSpan.style.color = "#888";
+            } else if (file.isTooLarge) {
+                pathSpan.textContent += " (> 1MB - skipped)";
                 pathSpan.style.color = "#888";
             }
 

@@ -31,13 +31,23 @@ GitPack is a privacy-first, client-side web utility designed to inspect, filter,
 
 ```text
 gitpack/
-├── index.html          # Application UI & layout
-├── style.css           # Styling and visual design
-│
-├── js/
-│   ├── main.js         # Main orchestrator & event listeners
-│   ├── fileReader.js   # Drag-and-drop & recursive folder parsing logic
-│   ├── fileTree.js     # In-memory file tree state management
-│   ├── filters.js      # Default exclude rules & smart filtering logic
-│   ├── formatter.js    # ASCII tree & text output generator
-│   └── ui.js           # DOM rendering (file list, preview, stats)
+├── index.html              # Application UI entry point
+├── css/
+│   └── style.css           # Styling and visual design
+└── src/
+    ├── main.js             # Main orchestrator & event listeners
+    ├── app/
+    │   ├── constants.js    # Default ignore sets & dimensions
+    │   └── state.js        # Central application state management
+    ├── core/
+    │   ├── fileReader.js   # Folder traversal & drag-and-drop parsing
+    │   ├── fileTree.js     # ASCII directory tree generation
+    │   ├── filters.js      # Smart filtering & path exclusion rules
+    │   ├── formatter.js    # ASCII tree & text digest generator
+    │   └── githubFetcher.js# GitHub repository & tree fetcher
+    ├── ui/
+    │   ├── templates.js    # Component HTML templates
+    │   └── ui.js           # Virtualized file list renderer
+    └── workers/
+        └── file-worker.js  # Dedicated Web Worker for background file decoding
+```
